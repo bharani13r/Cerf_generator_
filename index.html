@@ -1,193 +1,123 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
   <title>Digital Certificate Generator</title>
-
   <link rel="stylesheet" href="style.css">
 
-  <!-- Excel spreadsheet library -->
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-  <!-- PDF generation library -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-  <!-- ZIP download library -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-  <!-- QR code library: must load before script.js -->
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js"></script>
-
-  <!-- Your main JavaScript file: keep this last -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script defer src="script.js"></script>
 </head>
-
 <body>
-
 <header>
   <h1>Digital Certificate Generator</h1>
-  <p>Upload your spreadsheet and templates, then click to position each field.</p>
+  <p>Upload your spreadsheet and templates, position the fields, and generate verifiable certificates.</p>
 </header>
 
 <main>
-
   <section class="card">
     <h2>1. Upload Excel spreadsheet</h2>
-
-    <p>
-      Required columns: Serial No., Name, Event, Date, Email, Position.
-      Maximum 5 participants.
-    </p>
-
+    <p>Required columns: Serial No., Name, Event, Date, Email, Position. Position may be blank for participation certificates. Maximum 5 participants.</p>
     <input id="excelFile" type="file" accept=".xlsx,.xls">
-    <button id="readBtn">Read spreadsheet</button>
-
-    <p id="excelStatus" class="status"></p>
+    <button id="readBtn" type="button">Read spreadsheet</button>
+    <p id="excelStatus" class="status" aria-live="polite"></p>
     <div id="participantsTable"></div>
   </section>
 
   <section class="card">
     <h2>2. Upload and position certificate fields</h2>
-
     <label for="templateType">Template to edit</label>
-
     <select id="templateType">
       <option value="winner">Winner template (positions 1, 2, 3)</option>
-      <option value="participant">Participation template (others)</option>
+      <option value="participant">Participation template (other or blank positions)</option>
     </select>
 
     <label for="templateFile">Certificate image (JPG, JPEG, PNG)</label>
-
-    <input
-      id="templateFile"
-      type="file"
-      accept="image/jpeg,image/png,.jpg,.jpeg,.png"
-    >
-
-    <p id="templateStatus" class="status">
-      Upload the selected template image.
-    </p>
+    <input id="templateFile" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png">
+    <p id="templateStatus" class="status">Upload the selected template image.</p>
 
     <div class="editor">
-
       <aside class="toolbar">
-
         <label for="fieldSelect">Field to place</label>
-
         <select id="fieldSelect">
           <option value="Name">Participant name</option>
           <option value="Event">Event</option>
           <option value="Date">Date</option>
           <option value="Position">Position</option>
-          <option value="CertificateNumber">Certificate Number</option>
+          <option value="CertificateNumber">Certificate number</option>
         </select>
 
         <label for="fontSize">Font size (points)</label>
-
-        <input
-          id="fontSize"
-          type="number"
-          min="6"
-          max="72"
-          value="24"
-        >
+        <input id="fontSize" type="number" min="6" max="72" value="24">
 
         <label for="fontSelect">Font</label>
-
         <select id="fontSelect">
           <option value="helvetica">Helvetica</option>
           <option value="times">Times</option>
           <option value="courier">Courier</option>
         </select>
 
-        <label class="check">
-          <input id="boldText" type="checkbox">
-          Bold
-        </label>
+        <label class="check"><input id="boldText" type="checkbox"> Bold</label>
 
         <label for="textColor">Text color</label>
+        <input id="textColor" type="color" value="#111111">
 
-        <input
-          id="textColor"
-          type="color"
-          value="#111111"
-        >
+        <button id="placeModeBtn" type="button">Click template to place field</button>
+        <button id="clearFieldBtn" class="secondary" type="button">Clear selected field</button>
+        <button id="clearAllBtn" class="secondary" type="button">Clear all positions</button>
 
-        <button id="placeModeBtn">
-          Click template to place field
-        </button>
-
-        <button id="clearFieldBtn" class="secondary">
-          Clear selected field
-        </button>
-
-        <button id="clearAllBtn" class="secondary">
-          Clear all positions
-        </button>
-
-        <p id="editorStatus" class="status">
-          Choose a field, click the placement button, then click the template.
-        </p>
-
+        <p id="editorStatus" class="status" aria-live="polite">Choose a field, click the placement button, then click the template.</p>
         <div id="positionList"></div>
-
       </aside>
 
       <div class="canvasArea">
-
         <div id="canvasWrap">
-          <p id="emptyMessage">
-            Your template preview will appear here.
-          </p>
-
+          <p id="emptyMessage">Your template preview will appear here.</p>
           <canvas id="templateCanvas"></canvas>
           <div id="markers"></div>
         </div>
-
       </div>
     </div>
   </section>
 
   <section class="card">
-    <h2>3. Generate certificates</h2>
-
-    <button id="previewBtn">
-      Preview first participant
-    </button>
-
-    <button id="generateBtn">
-      Generate PDFs
-    </button>
-
-    <p id="generateStatus" class="status"></p>
-
-    <div id="pdfPreview"></div>
-    <div id="downloads"></div>
-
-    <button id="zipBtn" disabled>
-      Download all as ZIP
-    </button>
-
-    <button id="registerBtn" disabled>
-      Download Certificate Register (JSON)
-    </button>
+    <h2>3. Verification settings</h2>
+    <p>Enter your published GitHub Pages verification URL before generating PDFs on your computer. The QR code will open that page with the certificate number prefilled.</p>
+    <label for="verificationUrl">Public verification page URL</label>
+    <input id="verificationUrl" type="url" inputmode="url" placeholder="https://username.github.io/repository/verify.html" autocomplete="url">
+    <p class="status">If this generator is already running on your public website, you may leave this blank and it will use its own verify.html URL.</p>
   </section>
 
-  <p class="note">
-    This version creates PDFs and ZIP downloads in your browser.
-    Email delivery requires a separate secure backend.
-    QR verification requires the published verify.html page
-    and certificates.json register.
-  </p>
+  <section class="card">
+    <h2>4. Generate certificates</h2>
+    <button id="previewBtn" type="button">Preview first participant</button>
+    <button id="generateBtn" type="button">Generate PDFs and JSON register</button>
+    <p id="generateStatus" class="status" aria-live="polite"></p>
+    <div id="pdfPreview"></div>
+    <div id="downloads"></div>
+    <div id="registerDownload"></div>
+    <button id="zipBtn" type="button" disabled>Download all PDFs as ZIP</button>
+    <button id="registerBtn" type="button" disabled>Download certificate register (JSON)</button>
+  </section>
 
+  <section class="card">
+    <h2>5. Publish verification on GitHub Pages</h2>
+    <ol>
+      <li>Upload index.html, style.css, script.js and verify.html to your GitHub repository.</li>
+      <li>Generate certificates and download certificates.json.</li>
+      <li>Upload the generated certificates.json beside verify.html in the repository.</li>
+      <li>Enable GitHub Pages in repository settings and share the public verification URL.</li>
+    </ol>
+    <p class="note">The public JSON register excludes email addresses to protect participants' private contact details. Anyone can view the details included in a public register.</p>
+  </section>
+
+  <p class="note">PDFs, ZIP files and the JSON register are created in your browser. This static version does not send certificates by email or securely store private records on a server.</p>
 </main>
 
-<footer>
-  Digital Certificate Generator
-</footer>
-
+<footer>Digital Certificate Generator</footer>
 </body>
 </html>
