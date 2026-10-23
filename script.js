@@ -1,12 +1,14 @@
+"use strict";
 
 const $ = id => document.getElementById(id);
 
 let participants = [];
 let generatedFiles = [];
+let certificateRegister = [];
 let currentType = "winner";
 let placementMode = false;
 
-// Each template owns its own image, data, and text positions.
+// IMPORTANT: These are two independent template objects.
 const templates = {
   winner: {
     image: null,
@@ -20,17 +22,8 @@ const templates = {
   }
 };
 
-let currentTemplateImage = null;
-let currentImageData = null;
-
-const requiredColumns = [
-  "Serial No.",
-  "Name",
-  "Event",
-  "Date",
-  "Email",
-  "Position"
-];
+const canvas = $("templateCanvas");
+const ctx = canvas.getContext("2d");
 
 function setStatus(id, message, isError = false) {
   const element = $(id);
@@ -38,8 +31,22 @@ function setStatus(id, message, isError = false) {
   element.classList.toggle("error", isError);
 }
 
-function normalizeKey(value) {
-  return String(value ?? "").trim().toLowerCase();
+function selectedTemplate() {
+  return templates[currentType];
+}
+
+function templateStatusId(type) {
+  return type === "winner"
+    ? "winnerTemplateStatus"
+    : "participantTemplateStatus";
+}
+
+function cleanFileName(value) {
+  return String(value || "certificate")
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 100);
 }
 
 function escapeHtml(value) {
@@ -52,25 +59,104 @@ function escapeHtml(value) {
   })[character]);
 }
 
-function createCertificateId(serialNo) {
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-
-  const randomPart = Array.from(bytes)
-    .map(byte => byte.toString(16).padStart(2, "0"))
-    .join("")
-    .toUpperCase();
-
-  return `CERT-${serialNo}-${randomPart}`;
+function normalizeHeader(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
-// Positions 1, 2, and 3 use the winner template.
-// Other position values use the participation template.
-function getTemplateType(person) {
-  return ["1", "2", "3"].includes(
-    String(person.Position).trim()
-  ) ? "winner" : "participant";
+function getValue(row, possibleNames) {
+  const rowKeys = Object.keys(row);
+  for (const name of possibleNames) {
+    const foundKey = rowKeys.find(
+      key => normalizeHeader(key) === normalizeHeader(name)
+    );
+    if (foundKey !== undefined && String(row[foundKey]).trim() !== "") {
+      return String(row[foundKey]).trim();
+    }
+  }
+  return "";
 }
+
+
+// ------------------------------
+// EXCEL UPLOAD
+// ------------------------------
+
+$("readExcel").addEventListener("click", async () => {
+  const file = $("excelFile").files[0];
+
+  if (!file) {
+    setStatus("excelStatus", "Please select an Excel or CSV file.", true);
+    return;
+  }
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, {
+      type: "array",
+      cellDates: true
+    });
+
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      defval: "",
+      raw: false
+    });
+
+    if (!rows.length) {
+      participants = [];
+      renderParticipants();
+      setStatus("excelStatus", "The spreadsheet is empty.", true);
+      return;
+    }
+
+    participants = rows.map((row, index) => {
+      const name = getValue(row, [
+        "Name", "Participant Name", "Full Name", "Student Name"
+      ]);
+
+      const email = getValue(row, [
+        "Email", "Email ID", "Email Address", "Mail"
+      ]);
+
+      const typeValue = getValue(row, [
+        "Type", "Category", "Certificate Type", "Award"
+      ]).toLowerCase();
+
+      const type = (
+        typeValue.includes("winner") ||
+        typeValue.includes("first") ||
+        typeValue.includes("second") ||
+        typeValue.includes("third") ||
+        typeValue.includes("prize")
+      ) ? "winner" : "participant";
+
+      return {
+        name: name || `Participant ${index + 1}`,
+        email,
+        type,
+        serial: index + 1,
+        original: row
+      };
+    });
+
+    renderParticipants();
+
+    setStatus(
+      "excelStatus",
+      `Loaded ${participants.length} participant(s).`
+    );
+  } catch (error) {
+    console.error(error);
+    setStatus(
+      "excelStatus",
+      "Could not read this file. Check that it is a valid Excel or CSV file.",
+      true
+    );
+  }
+});
 
 function renderParticipants() {
   const container = $("participantsTable");
@@ -80,349 +166,177 @@ function renderParticipants() {
     return;
   }
 
-  const rows = participants.map(person => `
-    <tr>
-      <td>${escapeHtml(person["Serial No."])}</td>
-      <td>${escapeHtml(person.Name)}</td>
-      <td>${escapeHtml(person.Event)}</td>
-      <td>${escapeHtml(person.Date)}</td>
-      <td>${escapeHtml(person.Email)}</td>
-      <td>${escapeHtml(person.Position)}</td>
-      <td>${escapeHtml(person.certificateId)}</td>
-    </tr>
-  `).join("");
+  const visible = participants.slice(0, 5);
 
-  container.innerHTML = `
+  let html = `
+    <p>Participants loaded: ${participants.length}</p>
+    <div style="overflow-x:auto">
     <table>
       <thead>
         <tr>
-          <th>Serial No.</th>
+          <th>Serial</th>
           <th>Name</th>
-          <th>Event</th>
-          <th>Date</th>
           <th>Email</th>
-          <th>Position</th>
-          <th>Certificate ID</th>
+          <th>Template</th>
         </tr>
       </thead>
-      <tbody>${rows}</tbody>
-    </table>
+      <tbody>
   `;
-}
 
-// Read Excel spreadsheet.
-async function readExcel() {
-  const file = $("excelFile").files[0];
-
-  if (!file) {
-    setStatus("excelStatus", "Please select an Excel file.", true);
-    return;
+  for (const person of visible) {
+    html += `
+      <tr>
+        <td>${person.serial}</td>
+        <td>${escapeHtml(person.name)}</td>
+        <td>${escapeHtml(person.email || "Not provided")}</td>
+        <td>${escapeHtml(person.type)}</td>
+      </tr>
+    `;
   }
 
-  try {
-    const buffer = await file.arrayBuffer();
+  html += "</tbody></table></div>";
 
-    const workbook = XLSX.read(buffer, {
-      type: "array",
-      cellDates: true
-    });
-
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-
-    const rawRows = XLSX.utils.sheet_to_json(sheet, {
-      defval: "",
-      raw: false
-    });
-
-    if (!rawRows.length) {
-      setStatus("excelStatus", "The Excel sheet is empty.", true);
-      return;
-    }
-
-    if (rawRows.length > 5) {
-      setStatus(
-        "excelStatus",
-        "Maximum 5 participants are supported.",
-        true
-      );
-      return;
-    }
-
-    const headers = Object.keys(rawRows[0]);
-    const headerMap = {};
-
-    headers.forEach(header => {
-      headerMap[normalizeKey(header)] = header;
-    });
-
-    const missing = requiredColumns.filter(
-      column => !headerMap[normalizeKey(column)]
-    );
-
-    if (missing.length) {
-      setStatus(
-        "excelStatus",
-        `Missing required columns: ${missing.join(", ")}`,
-        true
-      );
-      return;
-    }
-
-    const newParticipants = rawRows.map((row, index) => {
-      const person = {};
-
-      requiredColumns.forEach(column => {
-        person[column] = String(
-          row[headerMap[normalizeKey(column)]] ?? ""
-        ).trim();
-      });
-
-      const serial = Number(person["Serial No."]);
-
-      if (
-        !person["Serial No."] ||
-        !Number.isInteger(serial) ||
-        serial < 1
-      ) {
-        throw new Error(
-          `Row ${index + 2}: Serial No. must be a positive whole number.`
-        );
-      }
-
-      for (const column of requiredColumns) {
-        if (!person[column]) {
-          throw new Error(
-            `Row ${index + 2}: ${column} is empty.`
-          );
-        }
-      }
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(person.Email)) {
-        throw new Error(
-          `Row ${index + 2}: Email address is invalid.`
-        );
-      }
-
-      person.type = getTemplateType(person);
-      person.certificateId = createCertificateId(serial);
-
-      return person;
-    });
-
-    const serials = newParticipants.map(
-      person => person["Serial No."]
-    );
-
-    if (new Set(serials).size !== serials.length) {
-      setStatus(
-        "excelStatus",
-        "Serial No. values must be unique.",
-        true
-      );
-      return;
-    }
-
-    participants = newParticipants;
-    generatedFiles = [];
-
-    $("downloads").replaceChildren();
-    $("pdfPreview").replaceChildren();
-    $("zipBtn").disabled = true;
-    $("registerBtn").disabled = true;
-
-    renderParticipants();
-
-    setStatus(
-      "excelStatus",
-      `${participants.length} participant(s) loaded successfully.`
-    );
-  } catch (error) {
-    setStatus(
-      "excelStatus",
-      error.message || "Could not read the spreadsheet.",
-      true
-    );
+  if (participants.length > 5) {
+    html += "<p class='status'>Only the first 5 participants will be processed.</p>";
   }
+
+  container.innerHTML = html;
 }
 
-// Switch between templates without replacing either saved image.
-function updateTemplateType() {
-  currentType = $("templateType").value;
 
-  currentTemplateImage = templates[currentType].image;
-  currentImageData = templates[currentType].data;
+// ------------------------------
+// SEPARATE TEMPLATE UPLOADS
+// ------------------------------
 
-  // Clear only the file picker, not the stored template.
-  $("templateFile").value = "";
-
-  placementMode = false;
-  $("placeModeBtn").textContent = "Click template to place field";
-
-  drawTemplate();
-  renderPositions();
-
-  setStatus(
-    "templateStatus",
-    currentTemplateImage
-      ? `${currentType} template loaded.`
-      : `Upload the ${currentType} template image.`
-  );
-}
-
-// Upload to the currently selected template only.
-function uploadTemplate() {
-  const file = $("templateFile").files[0];
+function uploadTemplate(type, inputId) {
+  const input = $(inputId);
+  const file = input.files[0];
+  const statusId = templateStatusId(type);
 
   if (!file) return;
 
-  if (!["image/jpeg", "image/png"].includes(file.type)) {
-    setStatus(
-      "templateStatus",
-      "Please upload a JPG or PNG image.",
-      true
-    );
+  if (!["image/png", "image/jpeg"].includes(file.type)) {
+    setStatus(statusId, "Choose a PNG, JPG, or JPEG image.", true);
+    input.value = "";
     return;
   }
 
-  // Capture the selected type before any asynchronous operation.
-  const targetType = $("templateType").value;
   const reader = new FileReader();
+
+  reader.onerror = () => {
+    setStatus(statusId, "Could not read the selected image.", true);
+  };
 
   reader.onload = () => {
     const image = new Image();
 
-    image.onload = () => {
-      // Save independently. Never assign this to the other template.
-      templates[targetType].image = image;
-      templates[targetType].data = reader.result;
-
-      if ($("templateType").value === targetType) {
-        currentType = targetType;
-        currentTemplateImage = image;
-        currentImageData = reader.result;
-
-        drawTemplate();
-        renderPositions();
-
-        setStatus(
-          "templateStatus",
-          `${targetType} template uploaded successfully.`
-        );
-      }
+    image.onerror = () => {
+      setStatus(statusId, "This image could not be opened.", true);
     };
 
-    image.onerror = () => {
-      setStatus(
-        "templateStatus",
-        `Could not load the ${targetType} template image.`,
-        true
-      );
+    image.onload = () => {
+      // The uploaded image is stored ONLY in templates[type].
+      // Uploading a participant image cannot change templates.winner.
+      templates[type].image = image;
+      templates[type].data = reader.result;
+
+      if ($("templateType").value === type) {
+        currentType = type;
+        drawTemplate();
+        renderPositions();
+      }
+
+      setStatus(statusId, `${type} certificate uploaded successfully.`);
+      setStatus("templateStatus", `Loaded ${type} certificate.`);
     };
 
     image.src = reader.result;
   };
 
-  reader.onerror = () => {
-    setStatus("templateStatus", "Could not read the file.", true);
-  };
-
   reader.readAsDataURL(file);
 }
 
-// Draw only the currently selected template.
-function drawTemplate() {
-  const canvas = $("templateCanvas");
-  const emptyMessage = $("emptyMessage");
-  const wrap = $("canvasWrap");
+$("winnerTemplateFile").addEventListener("change", () => {
+  uploadTemplate("winner", "winnerTemplateFile");
+});
 
-  const image = templates[currentType].image;
+$("participantTemplateFile").addEventListener("change", () => {
+  uploadTemplate("participant", "participantTemplateFile");
+});
 
-  if (!image) {
-    canvas.style.display = "none";
-    emptyMessage.style.display = "block";
-    $("markers").replaceChildren();
-    return;
-  }
 
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
+// ------------------------------
+// TEMPLATE PREVIEW
+// ------------------------------
 
-  const context = canvas.getContext("2d");
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(image, 0, 0);
-
-  canvas.style.display = "block";
-  canvas.style.width = "100%";
-  canvas.style.maxWidth = "850px";
-  canvas.style.height = "auto";
-
-  emptyMessage.style.display = "none";
-  wrap.style.width = "100%";
-
-  renderPositions();
-}
-
-function getCanvasPoint(event) {
-  const canvas = $("templateCanvas");
-  const rect = canvas.getBoundingClientRect();
-
-  return {
-    x: (event.clientX - rect.left) / rect.width,
-    y: (event.clientY - rect.top) / rect.height
-  };
-}
-
-// Position the selected text field.
-function placeField(event) {
-  if (!placementMode) return;
-
-  if (!templates[currentType].image) {
-    setStatus("editorStatus", "Upload a template image first.", true);
-    return;
-  }
-
-  const point = getCanvasPoint(event);
-  const field = $("fieldSelect").value;
-
-  templates[currentType].positions[field] = {
-    x: point.x,
-    y: point.y,
-    fontSize: Math.max(
-      6,
-      Math.min(72, Number($("fontSize").value) || 24)
-    ),
-    font: $("fontSelect").value,
-    bold: $("boldText").checked,
-    color: $("textColor").value
-  };
-
+function updateTemplateType() {
+  currentType = $("templateType").value;
   placementMode = false;
+
   $("placeModeBtn").textContent = "Click template to place field";
 
+  drawTemplate();
   renderPositions();
 
+  const template = selectedTemplate();
+
   setStatus(
-    "editorStatus",
-    `${field} position saved for ${currentType}.`
+    "templateStatus",
+    template.image
+      ? `Editing ${currentType} template.`
+      : `Upload the ${currentType} certificate image first.`
   );
 }
 
+$("templateType").addEventListener("change", updateTemplateType);
+
+function drawTemplate() {
+  const template = selectedTemplate();
+  const emptyMessage = $("emptyMessage");
+
+  if (!template.image) {
+    canvas.style.display = "none";
+    emptyMessage.style.display = "block";
+    $("markers").innerHTML = "";
+    return;
+  }
+
+  canvas.width = template.image.naturalWidth;
+  canvas.height = template.image.naturalHeight;
+  canvas.style.display = "block";
+  canvas.style.maxWidth = "100%";
+  canvas.style.height = "auto";
+  emptyMessage.style.display = "none";
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(template.image, 0, 0);
+
+  renderPositions();
+}
+
 function renderPositions() {
-  const positions = templates[currentType].positions;
+  const template = selectedTemplate();
   const list = $("positionList");
   const markers = $("markers");
 
-  list.replaceChildren();
-  markers.replaceChildren();
+  list.innerHTML = "";
+  markers.innerHTML = "";
 
-  Object.entries(positions).forEach(([field, position]) => {
-    const line = document.createElement("div");
+  const names = Object.keys(template.positions);
 
-    line.textContent =
-      `${field}: x ${(position.x * 100).toFixed(1)}%, ` +
-      `y ${(position.y * 100).toFixed(1)}%`;
+  if (!names.length) {
+    list.textContent = "No fields positioned yet.";
+    return;
+  }
 
-    list.appendChild(line);
+  names.forEach(field => {
+    const position = template.positions[field];
+
+    const item = document.createElement("div");
+    item.textContent =
+      `${field}: X ${Math.round(position.x * 100)}%, ` +
+      `Y ${Math.round(position.y * 100)}%`;
+    list.appendChild(item);
 
     const marker = document.createElement("div");
     marker.className = "marker";
@@ -431,430 +345,418 @@ function renderPositions() {
 
     const label = document.createElement("span");
     label.textContent = field;
-
     marker.appendChild(label);
+
     markers.appendChild(marker);
   });
 }
 
-function clearSelectedField() {
-  const field = $("fieldSelect").value;
+$("placeModeBtn").addEventListener("click", () => {
+  if (!selectedTemplate().image) {
+    setStatus(
+      "templateStatus",
+      `Upload the ${currentType} template before placing fields.`,
+      true
+    );
+    return;
+  }
 
-  delete templates[currentType].positions[field];
+  placementMode = !placementMode;
+
+  $("placeModeBtn").textContent = placementMode
+    ? "Now click the certificate"
+    : "Click template to place field";
+
+  setStatus(
+    "templateStatus",
+    placementMode
+      ? `Click the preview to position ${$("fieldType").value}.`
+      : "Field placement cancelled."
+  );
+});
+
+canvas.addEventListener("click", event => {
+  if (!placementMode) return;
+
+  const rect = canvas.getBoundingClientRect();
+
+  if (!rect.width || !rect.height) return;
+
+  const x = Math.max(
+    0,
+    Math.min(1, (event.clientX - rect.left) / rect.width)
+  );
+
+  const y = Math.max(
+    0,
+    Math.min(1, (event.clientY - rect.top) / rect.height)
+  );
+
+  const field = $("fieldType").value;
+
+  // Positions are stored independently for the selected template.
+  selectedTemplate().positions[field] = { x, y };
+
+  placementMode = false;
+  $("placeModeBtn").textContent = "Click template to place field";
 
   renderPositions();
-  setStatus("editorStatus", `${field} position cleared.`);
-}
 
-function clearAllPositions() {
-  templates[currentType].positions = {};
+  setStatus(
+    "templateStatus",
+    `${field} position saved for the ${currentType} template.`
+  );
+});
 
+$("clearPositionsBtn").addEventListener("click", () => {
+  selectedTemplate().positions = {};
   renderPositions();
   setStatus(
-    "editorStatus",
-    `All positions cleared for ${currentType} template.`
+    "templateStatus",
+    `Positions cleared for the ${currentType} template only.`
   );
+});
+
+
+// ------------------------------
+// PDF GENERATION HELPERS
+// ------------------------------
+
+function getPdfFont(fontName) {
+  const fonts = PDFLib.StandardFonts;
+
+  const mapping = {
+    Helvetica: fonts.Helvetica,
+    "Helvetica-Bold": fonts.HelveticaBold,
+    TimesRoman: fonts.TimesRoman,
+    "TimesRoman-Bold": fonts.TimesRomanBold,
+    Courier: fonts.Courier
+  };
+
+  return mapping[fontName] || fonts.Helvetica;
+}
+
+function getFieldText(field, person, certificateId, eventName, eventDate) {
+  switch (field) {
+    case "name":
+      return person.name;
+    case "event":
+      return eventName;
+    case "date":
+      return eventDate;
+    case "certificateId":
+      return certificateId;
+    case "serial":
+      return String(person.serial);
+    default:
+      return "";
+  }
 }
 
 function hexToRgb(hex) {
-  const clean = String(hex).replace("#", "");
+  const clean = String(hex || "#000000").replace("#", "");
+  const valid = /^[0-9a-fA-F]{6}$/.test(clean)
+    ? clean
+    : "000000";
 
   return {
-    r: parseInt(clean.substring(0, 2), 16),
-    g: parseInt(clean.substring(2, 4), 16),
-    b: parseInt(clean.substring(4, 6), 16)
+    r: parseInt(valid.slice(0, 2), 16) / 255,
+    g: parseInt(valid.slice(2, 4), 16) / 255,
+    b: parseInt(valid.slice(4, 6), 16) / 255
   };
 }
 
-// Generate a QR image containing the verification page URL.
-function makeQrImage(url) {
-  return new Promise((resolve, reject) => {
-    if (!window.QRCode) {
-      reject(new Error("QR code library failed to load."));
-      return;
-    }
+function makeCertificateId(person, index) {
+  const prefix = person.type === "winner" ? "WIN" : "PAR";
+  const serial = String(index + 1).padStart(3, "0");
+  const random = Math.random().toString(36).slice(2, 7).toUpperCase();
 
-    const holder = document.createElement("div");
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}-${serial}-${random}`;
+}
 
-    holder.style.position = "fixed";
-    holder.style.left = "-10000px";
-    holder.style.top = "0";
+async function makePDF(person, template, certificateId, eventName, eventDate) {
+  if (!template.image || !template.data) {
+    throw new Error(`The ${person.type} certificate template is missing.`);
+  }
 
-    document.body.appendChild(holder);
+  const pdfDoc = await PDFLib.PDFDocument.create();
 
+  const bytes = await fetch(template.data).then(response => response.arrayBuffer())
+    .catch(() => null);
+
+  // Decode the data URL directly, avoiding a network request.
+  const base64 = template.data.split(",")[1];
+  const binary = atob(base64);
+  const imageBytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    imageBytes[i] = binary.charCodeAt(i);
+  }
+
+  let embeddedImage;
+
+  if (template.data.startsWith("data:image/png")) {
+    embeddedImage = await pdfDoc.embedPng(imageBytes);
+  } else {
+    embeddedImage = await pdfDoc.embedJpg(imageBytes);
+  }
+
+  const pageWidth = embeddedImage.width;
+  const pageHeight = embeddedImage.height;
+
+  const page = pdfDoc.addPage([pageWidth, pageHeight]);
+
+  page.drawImage(embeddedImage, {
+    x: 0,
+    y: 0,
+    width: pageWidth,
+    height: pageHeight
+  });
+
+  const fontName = $("fontFamily").value;
+  const font = await pdfDoc.embedFont(getPdfFont(fontName));
+  const fontSize = Math.max(
+    6,
+    Math.min(100, Number($("fontSize").value) || 24)
+  );
+
+  const color = hexToRgb($("fontColor").value);
+  const positions = template.positions;
+
+  for (const field of Object.keys(positions)) {
+    const position = positions[field];
+    const text = getFieldText(
+      field, person, certificateId, eventName, eventDate
+    );
+
+    if (!text) continue;
+
+    const x = position.x * pageWidth;
+    const y = pageHeight - position.y * pageHeight;
+    const textWidth = font.widthOfTextAtSize(text, fontSize);
+
+    const centered = $("centerText").checked;
+    const drawX = centered ? x - textWidth / 2 : x;
+
+    page.drawText(text, {
+      x: Math.max(0, drawX),
+      y: Math.max(0, Math.min(pageHeight - fontSize, y - fontSize / 2)),
+      size: fontSize,
+      font,
+      color: PDFLib.rgb(color.r, color.g, color.b),
+      maxWidth: pageWidth
+    });
+  }
+
+  // Generate a QR code pointing to the verification page.
+  const verifyBaseUrl = $("verifyBaseUrl").value.trim();
+
+  if (verifyBaseUrl) {
     try {
-      new QRCode(holder, {
-        text: url,
-        width: 220,
-        height: 220,
-        correctLevel: QRCode.CorrectLevel.M
+      const separator = verifyBaseUrl.includes("?") ? "&" : "?";
+      const verifyUrl =
+        `${verifyBaseUrl}${separator}id=${encodeURIComponent(certificateId)}`;
+
+      const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+        width: 180,
+        margin: 1
       });
 
-      setTimeout(() => {
-        try {
-          const canvas = holder.querySelector("canvas");
-          const img = holder.querySelector("img");
+      const qrBase64 = qrDataUrl.split(",")[1];
+      const qrBinary = atob(qrBase64);
+      const qrBytes = new Uint8Array(qrBinary.length);
 
-          if (canvas) {
-            resolve(canvas.toDataURL("image/png"));
-          } else if (img && img.src) {
-            resolve(img.src);
-          } else {
-            reject(new Error("Could not create the QR image."));
-          }
-        } catch (error) {
-          reject(error);
-        } finally {
-          holder.remove();
-        }
-      }, 200);
+      for (let i = 0; i < qrBinary.length; i++) {
+        qrBytes[i] = qrBinary.charCodeAt(i);
+      }
+
+      const qrImage = await pdfDoc.embedPng(qrBytes);
+      const qrSize = Math.min(70, pageWidth * 0.12, pageHeight * 0.18);
+
+      page.drawImage(qrImage, {
+        x: Math.max(0, pageWidth - qrSize - 15),
+        y: 15,
+        width: qrSize,
+        height: qrSize
+      });
     } catch (error) {
-      holder.remove();
-      reject(error);
+      console.warn("QR code could not be added:", error);
     }
-  });
-}
-
-// Create one PDF using the correct person's template.
-async function makePDF(person, template) {
-  const { jsPDF } = window.jspdf;
-
-  if (!template.image || !template.data) {
-    throw new Error(
-      `Upload the ${person.type} template before generating certificates.`
-    );
   }
 
-  const image = template.image;
+  const pdfBytes = await pdfDoc.save();
 
-  const orientation =
-    image.naturalWidth >= image.naturalHeight
-      ? "landscape"
-      : "portrait";
-
-  const pdf = new jsPDF({
-    orientation,
-    unit: "pt",
-    format: "a4"
-  });
-
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-
-  const imageFormat = template.data.startsWith("data:image/png")
-    ? "PNG"
-    : "JPEG";
-
-  pdf.addImage(
-    template.data,
-    imageFormat,
-    0,
-    0,
-    pageW,
-    pageH
-  );
-
-  // Add fields using positions saved for this particular template.
-  Object.entries(template.positions).forEach(([field, position]) => {
-    const value = person[field];
-
-    if (value === undefined || value === "") return;
-
-    const rgb = hexToRgb(position.color);
-
-    pdf.setTextColor(rgb.r, rgb.g, rgb.b);
-
-    pdf.setFont(
-      position.font || "helvetica",
-      position.bold ? "bold" : "normal"
-    );
-
-    pdf.setFontSize(position.fontSize || 24);
-
-    pdf.text(
-      String(value),
-      position.x * pageW,
-      position.y * pageH,
-      { align: "center" }
-    );
-  });
-
-  const verificationUrl = new URL(
-    "verify.html",
-    window.location.href
-  ).href;
-
-  const qrImage = await makeQrImage(verificationUrl);
-
-  const qrSize = 58;
-  const margin = 20;
-  const qrX = pageW - qrSize - margin;
-  const qrY = pageH - qrSize - margin;
-
-  pdf.addImage(
-    qrImage,
-    "PNG",
-    qrX,
-    qrY,
-    qrSize,
-    qrSize
-  );
-
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(7);
-  pdf.setTextColor(0, 0, 0);
-
-  pdf.text(
-    person.certificateId,
-    qrX + qrSize / 2,
-    qrY - 5,
-    { align: "center" }
-  );
-
-  return pdf.output("blob");
+  return new Blob([pdfBytes], { type: "application/pdf" });
 }
 
-async function previewFirstParticipant() {
+
+// ------------------------------
+// GENERATE CERTIFICATES
+// ------------------------------
+
+$("generateBtn").addEventListener("click", async () => {
   if (!participants.length) {
-    setStatus("generateStatus", "Read the Excel spreadsheet first.", true);
+    setStatus("generateStatus", "Upload and read an Excel file first.", true);
     return;
   }
 
-  const person = participants[0];
-  const template = templates[person.type];
+  const people = participants.slice(0, 5);
 
-  if (!template.image) {
+  const missing = [...new Set(
+    people
+      .filter(person => !templates[person.type].image)
+      .map(person => person.type)
+  )];
+
+  if (missing.length) {
     setStatus(
       "generateStatus",
-      `Upload the ${person.type} template first.`,
+      `Upload these required templates first: ${missing.join(", ")}.`,
       true
     );
     return;
   }
 
-  try {
-    setStatus("generateStatus", "Creating preview...");
+  const eventName = $("eventName").value.trim();
+  const eventDate = $("eventDate").value.trim();
 
-    const blob = await makePDF(person, template);
-    const url = URL.createObjectURL(blob);
-
-    $("pdfPreview").replaceChildren();
-
-    const iframe = document.createElement("iframe");
-    iframe.title = "Certificate preview";
-    iframe.src = url;
-
-    $("pdfPreview").appendChild(iframe);
-
-    setStatus("generateStatus", "Preview ready.");
-  } catch (error) {
+  if (!eventName || !eventDate) {
     setStatus(
       "generateStatus",
-      error.message || "Could not create preview.",
-      true
-    );
-  }
-}
-
-async function generatePDFs() {
-  if (!participants.length) {
-    setStatus("generateStatus", "Read the Excel spreadsheet first.", true);
-    return;
-  }
-
-  if (!window.jspdf || !window.QRCode) {
-    setStatus(
-      "generateStatus",
-      "A required PDF or QR library did not load. Check your connection and reload.",
+      "Enter both the event name and event date.",
       true
     );
     return;
   }
 
-  // Check every required template before starting.
-  const missingTypes = [
-    ...new Set(
-      participants
-        .filter(person => !templates[person.type].image)
-        .map(person => person.type)
-    )
-  ];
-
-  if (missingTypes.length) {
-    setStatus(
-      "generateStatus",
-      `Upload these template(s) first: ${missingTypes.join(", ")}`,
-      true
-    );
-    return;
-  }
-
+  const button = $("generateBtn");
+  button.disabled = true;
+  $("downloadArea").innerHTML = "";
   generatedFiles = [];
-
-  $("downloads").replaceChildren();
-  $("pdfPreview").replaceChildren();
-  $("zipBtn").disabled = true;
-  $("registerBtn").disabled = true;
-  $("generateBtn").disabled = true;
+  certificateRegister = [];
 
   try {
-    for (let i = 0; i < participants.length; i++) {
-      const person = participants[i];
+    for (let i = 0; i < people.length; i++) {
+      const person = people[i];
 
-      // Crucial: choose the correct template for each participant.
+      // Choose the correct, independent template for this participant.
       const template = templates[person.type];
+      const certificateId = makeCertificateId(person, i);
 
       setStatus(
         "generateStatus",
-        `Generating certificate ${i + 1} of ${participants.length}...`
+        `Generating certificate ${i + 1} of ${people.length}...`
       );
 
-      const blob = await makePDF(person, template);
+      const blob = await makePDF(
+        person,
+        template,
+        certificateId,
+        eventName,
+        eventDate
+      );
 
-      generatedFiles.push({
-        name: `Certificate_${person["Serial No."]}.pdf`,
-        blob
+      const filename =
+        `${String(person.serial).padStart(3, "0")}_` +
+        `${cleanFileName(person.name)}.pdf`;
+
+      generatedFiles.push({ filename, blob });
+
+      certificateRegister.push({
+        certificateId,
+        name: person.name,
+        email: person.email,
+        type: person.type,
+        serial: person.serial,
+        event: eventName,
+        date: eventDate,
+        filename
       });
     }
 
-    generatedFiles.forEach(file => {
-      const url = URL.createObjectURL(file.blob);
-      const link = document.createElement("a");
+    showDownloads();
 
-      link.className = "download-link";
-      link.href = url;
-      link.download = file.name;
-      link.textContent = `Download ${file.name}`;
-
-      $("downloads").appendChild(link);
-    });
-
-    $("zipBtn").disabled = false;
-    $("registerBtn").disabled = false;
+    $("downloadRegisterBtn").disabled = false;
 
     setStatus(
       "generateStatus",
-      `Successfully generated ${generatedFiles.length} PDF(s). Download the certificate register and publish it to GitHub.`
+      `Successfully generated ${generatedFiles.length} certificate(s).`
     );
   } catch (error) {
+    console.error(error);
     setStatus(
       "generateStatus",
-      error.message || "PDF generation failed.",
+      `Generation failed: ${error.message || error}`,
       true
     );
   } finally {
-    $("generateBtn").disabled = false;
+    button.disabled = false;
   }
+});
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+function showDownloads() {
+  const area = $("downloadArea");
+  area.innerHTML = "";
+
+  generatedFiles.forEach(file => {
+    const link = document.createElement("a");
+    link.className = "download-link";
+    link.href = URL.createObjectURL(file.blob);
+    link.download = file.filename;
+    link.textContent = `Download ${file.filename}`;
+    area.appendChild(link);
+  });
+
+  const zipButton = document.createElement("button");
+  zipButton.textContent = "Download All Certificates (ZIP)";
+  zipButton.addEventListener("click", downloadZip);
+  area.appendChild(zipButton);
 }
 
 async function downloadZip() {
   if (!generatedFiles.length) return;
 
-  const zip = new JSZip();
+  try {
+    const zip = new JSZip();
 
-  generatedFiles.forEach(file => {
-    zip.file(file.name, file.blob);
-  });
+    generatedFiles.forEach(file => {
+      zip.file(file.filename, file.blob);
+    });
 
-  const blob = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(blob);
-
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "Certificates.zip";
-  link.click();
-
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const blob = await zip.generateAsync({ type: "blob" });
+    downloadBlob(blob, "certificates.zip");
+  } catch (error) {
+    console.error(error);
+    setStatus("generateStatus", "Could not create ZIP file.", true);
+  }
 }
 
-function downloadRegister() {
-  if (!participants.length || !generatedFiles.length) {
-    setStatus(
-      "generateStatus",
-      "Generate the PDFs before downloading the register.",
-      true
-    );
-    return;
-  }
-
-  const register = {
-    certificates: participants.map(person => ({
-      id: person.certificateId,
-      serialNo: person["Serial No."],
-      name: person.Name,
-      event: person.Event,
-      date: person.Date,
-      position: person.Position
-    }))
+$("downloadRegisterBtn").addEventListener("click", () => {
+  const data = {
+    certificates: certificateRegister
   };
 
   const blob = new Blob(
-    [JSON.stringify(register, null, 2)],
+    [JSON.stringify(data, null, 2)],
     { type: "application/json" }
   );
 
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = "certificates.json";
-  link.click();
-
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-// Connect the HTML controls.
-$("readBtn").addEventListener("click", readExcel);
-
-$("templateType").addEventListener(
-  "change",
-  updateTemplateType
-);
-
-$("templateFile").addEventListener(
-  "change",
-  uploadTemplate
-);
-
-$("placeModeBtn").addEventListener("click", () => {
-  placementMode = true;
-
-  $("placeModeBtn").textContent = "Now click the template";
-
-  setStatus(
-    "editorStatus",
-    `Click the template to place ${$("fieldSelect").value}.`
-  );
+  downloadBlob(blob, "certificates.json");
 });
 
-$("templateCanvas").addEventListener("click", placeField);
 
-$("clearFieldBtn").addEventListener(
-  "click",
-  clearSelectedField
-);
-
-$("clearAllBtn").addEventListener(
-  "click",
-  clearAllPositions
-);
-
-$("previewBtn").addEventListener(
-  "click",
-  previewFirstParticipant
-);
-
-$("generateBtn").addEventListener(
-  "click",
-  generatePDFs
-);
-
-$("zipBtn").addEventListener("click", downloadZip);
-
-$("registerBtn").addEventListener(
-  "click",
-  downloadRegister
-);
-
-// Initialize the first selected template view.
+// Initial screen
 updateTemplateType();
