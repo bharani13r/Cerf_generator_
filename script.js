@@ -136,8 +136,8 @@ async function readExcel() {
       throw new Error("The Excel sheet is empty.");
     }
 
-    if (rows.length > 70) {
-      throw new Error("Maximum 70 participants are supported.");
+    if (rows.length > 20) {
+      throw new Error("Maximum 20 participants are supported.");
     }
 
     const headerMap = {};
