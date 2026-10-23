@@ -608,7 +608,7 @@ async function makePDF(person, template) {
 
     if (!value) return;
     
-    const horizontalCorrection = 8;
+    const horizontalCorrection = 48;
     const x = Number(pos.x) * pageW;
     const topY = Number(pos.y) * pageH;
     const fontSize = Number(pos.fontSize) || 24;
