@@ -1,141 +1,263 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Certificate Verification</title>
+  <title>Verify Certificate</title>
   <link rel="stylesheet" href="style.css">
+
+  <style>
+    .verify-shell {
+      max-width: 720px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+
+    .verify-card {
+      background: white;
+      border: 1px solid #dce5ee;
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .verify-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .verify-form .field {
+      flex: 1 1 260px;
+    }
+
+    .verify-form input {
+      width: 100%;
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 8px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .result.success {
+      background: #eaf8ef;
+      border: 1px solid #a7dfb8;
+      color: #14532d;
+    }
+
+    .result.failure {
+      background: #fff0f0;
+      border: 1px solid #f0b5b5;
+      color: #8a1c1c;
+    }
+
+    .result.warning {
+      background: #fff8e8;
+      border: 1px solid #efd99b;
+      color: #704b00;
+    }
+
+    .result table {
+      background: white;
+      color: #203044;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
 </head>
+
 <body>
 <header>
   <h1>Certificate Verification</h1>
-  <p>Check whether a digital certificate is listed in the official register.</p>
+  <p>Check whether a certificate number appears in the published certificate register.</p>
 </header>
 
-<main>
-  <section class="card">
-    <h2>Verify Certificate</h2>
+<main class="verify-shell">
+  <section class="verify-card">
+    <h2>Verify a certificate</h2>
 
-    <label for="certificateId">Certificate Number</label>
-    <input id="certificateId" type="text" placeholder="Enter certificate number">
+    <p>
+      Enter the certificate number printed on the certificate,
+      or open this page using its QR code.
+    </p>
 
-    <button id="verifyBtn">Verify Certificate</button>
-    <p id="verifyStatus" class="status" aria-live="polite"></p>
-    <div id="certificateDetails"></div>
+    <form id="verifyForm" class="verify-form">
+      <div class="field">
+        <label for="certificateId">Certificate number</label>
+        <input
+          id="certificateId"
+          name="certificateId"
+          type="text"
+          placeholder="e.g. CERT-104-A7F29C83"
+          autocomplete="off"
+          required
+        >
+      </div>
 
-    <p><a href="index.html">Back to Certificate Generator</a></p>
+      <button type="submit">Verify certificate</button>
+    </form>
+
+    <div
+      id="result"
+      class="result hidden"
+      role="status"
+      aria-live="polite"
+    ></div>
   </section>
+
+  <p class="note">
+    A successful result means the number and displayed details match
+    the published register. It does not independently prove that a PDF
+    has not been edited. If you believe a certificate is fraudulent,
+    contact the issuing institution.
+  </p>
 </main>
 
-<footer>Digital Certificate Verification</footer>
+<footer>Certificate Verification Portal</footer>
 
 <script>
-"use strict";
+(() => {
+  const form = document.getElementById("verifyForm");
+  const input = document.getElementById("certificateId");
+  const result = document.getElementById("result");
 
-const idInput = document.getElementById("certificateId");
-const statusBox = document.getElementById("verifyStatus");
-const details = document.getElementById("certificateDetails");
+  function showResult(kind, title, message) {
+    result.className = `result ${kind}`;
+    result.replaceChildren();
 
-function showStatus(message, error = false) {
-  statusBox.textContent = message;
-  statusBox.classList.toggle("error", error);
-}
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    result.appendChild(heading);
 
-async function verifyCertificate() {
-  const id = idInput.value.trim();
-  details.replaceChildren();
-
-  if (!id) {
-    showStatus("Enter a certificate number.", true);
-    return;
+    const paragraph = document.createElement("p");
+    paragraph.textContent = message;
+    result.appendChild(paragraph);
   }
 
-  showStatus("Checking certificate register...");
-
-  try {
-    const response = await fetch("./certificates.json", {
-      cache: "no-store"
-    });
-
-    if (!response.ok) {
-      throw new Error("Could not load the certificate register.");
-    }
-
-    const data = await response.json();
-    const certificates = Array.isArray(data)
-      ? data
-      : data.certificates;
-
-    if (!Array.isArray(certificates)) {
-      throw new Error("The certificate register has an invalid format.");
-    }
-
-    const record = certificates.find(item =>
-      String(item.certificateNumber || item.certificateId || "")
-        .trim()
-        .toLowerCase() === id.toLowerCase()
-    );
-
-    if (!record) {
-      showStatus("NOT VERIFIED — No matching certificate was found.", true);
-      return;
-    }
-
-    showStatus("VERIFIED — Certificate found in the register.");
-
+  function addDetailTable(record) {
     const table = document.createElement("table");
     const tbody = document.createElement("tbody");
 
-    const fields = [
-      ["Certificate Number", record.certificateNumber || record.certificateId],
-      ["Serial No.", record.serialNo],
+    const rows = [
+      ["Certificate number", record.id],
       ["Name", record.name],
       ["Event", record.event],
       ["Date", record.date],
-      ["Position", record.position],
-      ["Certificate Type", record.certificateType || record.type]
+      ["Position", record.position || "Participation"],
+      [
+        "Certificate type",
+        record.type === "winner" ? "Winner" : "Participation"
+      ],
+      ["Serial number", record.serialNo]
     ];
 
-    fields.forEach(([label, value]) => {
-      if (value === undefined || value === null || value === "") return;
+    rows.forEach(([label, value]) => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      const td = document.createElement("td");
 
-      const row = document.createElement("tr");
-      const heading = document.createElement("th");
-      const cell = document.createElement("td");
+      th.textContent = label;
+      td.textContent = String(value ?? "");
 
-      heading.textContent = label;
-      cell.textContent = String(value);
-
-      row.append(heading, cell);
-      tbody.appendChild(row);
+      tr.append(th, td);
+      tbody.appendChild(tr);
     });
 
     table.appendChild(tbody);
-    details.appendChild(table);
-  } catch (error) {
-    showStatus(
-      error.message + " Make sure certificates.json is published beside this page.",
-      true
-    );
+    result.appendChild(table);
   }
-}
 
-document.getElementById("verifyBtn")
-  .addEventListener("click", verifyCertificate);
+  async function verifyCertificate(certificateId) {
+    const normalizedId = certificateId.trim().toUpperCase();
 
-idInput.addEventListener("keydown", event => {
-  if (event.key === "Enter") verifyCertificate();
-});
+    if (!normalizedId) {
+      showResult(
+        "warning",
+        "Enter a certificate number",
+        "Please enter the certificate number printed on the certificate."
+      );
+      return;
+    }
 
-// Automatically verify an ID supplied by the QR-code link.
-const params = new URLSearchParams(window.location.search);
-const suppliedId = params.get("id");
+    showResult(
+      "warning",
+      "Checking certificate…",
+      "Loading the official certificate register."
+    );
 
-if (suppliedId) {
-  idInput.value = suppliedId;
-  verifyCertificate();
-}
+    try {
+      const registerUrl = new URL(
+        "certificates.json",
+        window.location.href
+      );
+
+      // Avoid using a cached copy of the register.
+      registerUrl.searchParams.set("_", String(Date.now()));
+
+      const response = await fetch(registerUrl.href, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error("The certificate register could not be loaded.");
+      }
+
+      const register = await response.json();
+
+      if (!register || !Array.isArray(register.certificates)) {
+        throw new Error("The certificate register has an invalid format.");
+      }
+
+      const match = register.certificates.find(record =>
+        String(record.id ?? "").trim().toUpperCase() === normalizedId
+      );
+
+      if (!match) {
+        showResult(
+          "failure",
+          "Certificate not found",
+          "This certificate number does not appear in the published register. Check the number or contact the issuing institution."
+        );
+        return;
+      }
+
+      showResult(
+        "success",
+        "Certificate verified",
+        "This certificate number matches a record in the published certificate register."
+      );
+
+      addDetailTable(match);
+
+    } catch (error) {
+      showResult(
+        "warning",
+        "Verification unavailable",
+        "The public register could not be loaded. The issuing institution may not have published certificates.json yet, or the website may be temporarily unavailable."
+      );
+    }
+  }
+
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    verifyCertificate(input.value);
+  });
+
+  // If the QR code supplies ?id=CERT-..., prefill and verify automatically.
+  const params = new URLSearchParams(window.location.search);
+  const queryId = params.get("id") || params.get("certificate") || "";
+
+  if (queryId) {
+    input.value = queryId;
+    verifyCertificate(queryId);
+  }
+})();
 </script>
 </body>
 </html>
