@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,7 +22,7 @@
 <main>
   <section class="card">
     <h2>1. Upload Excel spreadsheet</h2>
-    <p>Required columns: Serial No., Name, Event, Date, Email, Position. Position may be blank for participation certificates. Maximum 5 participants.</p>
+    <p>Required columns: Serial No., Name, Event, Date, Email, Position. Positions 1–3 use the winner template; other or blank positions use the participation template. Maximum 5 participants.</p>
     <input id="excelFile" type="file" accept=".xlsx,.xls">
     <button id="readBtn" type="button">Read spreadsheet</button>
     <p id="excelStatus" class="status" aria-live="polite"></p>
@@ -30,6 +31,7 @@
 
   <section class="card">
     <h2>2. Upload and position certificate fields</h2>
+
     <label for="templateType">Template to edit</label>
     <select id="templateType">
       <option value="winner">Winner template (positions 1, 2, 3)</option>
@@ -48,7 +50,6 @@
           <option value="Event">Event</option>
           <option value="Date">Date</option>
           <option value="Position">Position</option>
-          <option value="CertificateNumber">Certificate number</option>
         </select>
 
         <label for="fontSize">Font size (points)</label>
@@ -109,10 +110,10 @@
     <ol>
       <li>Upload index.html, style.css, script.js and verify.html to your GitHub repository.</li>
       <li>Generate certificates and download certificates.json.</li>
-      <li>Upload the generated certificates.json beside verify.html in the repository.</li>
+      <li>Upload certificates.json beside verify.html in the repository.</li>
       <li>Enable GitHub Pages in repository settings and share the public verification URL.</li>
     </ol>
-    <p class="note">The public JSON register excludes email addresses to protect participants' private contact details. Anyone can view the details included in a public register.</p>
+    <p class="note">The public JSON register excludes email addresses. Anyone can view the details included in a public register.</p>
   </section>
 
   <p class="note">PDFs, ZIP files and the JSON register are created in your browser. This static version does not send certificates by email or securely store private records on a server.</p>
