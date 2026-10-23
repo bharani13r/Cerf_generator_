@@ -1,0 +1,118 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digital Certificate Generator</title>
+  <link rel="stylesheet" href="style.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>Digital Certificate Generator</h1>
+  <p>Upload your spreadsheet and templates, then position each field.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. Upload Excel spreadsheet</h2>
+    <p>Required columns: Serial No., Name, Event, Date, Email, Position. Maximum 5 participants.</p>
+    <input id="excelFile" type="file" accept=".xlsx,.xls">
+    <button id="readBtn">Read spreadsheet</button>
+    <p id="excelStatus" class="status"></p>
+    <div id="participantsTable"></div>
+  </section>
+
+  <section class="card">
+    <h2>2. Upload and position certificate fields</h2>
+
+    <label for="templateType">Template to edit</label>
+    <select id="templateType">
+      <option value="winner">Winner template (positions 1, 2, 3)</option>
+      <option value="participant">Participation template (others)</option>
+    </select>
+
+    <label for="templateFile">Certificate image (JPG, JPEG, PNG)</label>
+    <input id="templateFile" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png">
+    <p id="templateStatus" class="status">Upload the selected template image.</p>
+
+    <div class="editor">
+      <aside class="toolbar">
+        <label for="fieldSelect">Field to place</label>
+        <select id="fieldSelect">
+          <option value="Name">Participant name</option>
+          <option value="Event">Event</option>
+          <option value="Date">Date</option>
+          <option value="Position">Position</option>
+        </select>
+
+        <label for="fontSize">Font size (points)</label>
+        <input id="fontSize" type="number" min="6" max="72" value="24">
+
+        <label for="fontSelect">Font</label>
+        <select id="fontSelect">
+          <option value="helvetica">Helvetica</option>
+          <option value="times">Times</option>
+          <option value="courier">Courier</option>
+        </select>
+
+        <label class="check">
+          <input id="boldText" type="checkbox"> Bold
+        </label>
+
+        <label for="textColor">Text color</label>
+        <input id="textColor" type="color" value="#111111">
+
+        <button id="placeModeBtn">Click template to place field</button>
+        <button id="clearFieldBtn" class="secondary">Clear selected field</button>
+        <button id="clearAllBtn" class="secondary">Clear all positions</button>
+
+        <p id="editorStatus" class="status">
+          Choose a field, click the placement button, then click the template.
+        </p>
+        <div id="positionList"></div>
+      </aside>
+
+      <div class="canvasArea">
+        <div id="canvasWrap">
+          <p id="emptyMessage">Your template preview will appear here.</p>
+          <canvas id="templateCanvas"></canvas>
+          <div id="markers"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. Generate certificates</h2>
+    <p>Each certificate receives a unique ID and QR code.</p>
+    <button id="previewBtn">Preview first participant</button>
+    <button id="generateBtn">Generate PDFs</button>
+    <p id="generateStatus" class="status"></p>
+    <div id="pdfPreview"></div>
+    <div id="downloads"></div>
+    <button id="zipBtn" disabled>Download all as ZIP</button>
+    <button id="registerBtn" disabled>Download certificate register</button>
+    <p class="note">
+      After generating certificates, download the certificate register and
+      upload it to your GitHub repository as certificates.json.
+      The verification page can only look up records after that file is published.
+    </p>
+  </section>
+
+  <section class="card">
+    <h2>4. Verify a certificate</h2>
+    <p>Scan the QR code on a certificate or enter its certificate number.</p>
+    <a href="verify.html">Open verification page</a>
+  </section>
+</main>
+
+<footer>Digital Certificate Generator</footer>
+<script src="script.js"></script>
+</body>
+</html>
