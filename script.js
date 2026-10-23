@@ -206,11 +206,17 @@ async function readExcel() {
         );
       }
 
-      person.type = ["1", "2", "3"].includes(
-        person.Position.trim()
-      )
-        ? "winner"
-        : "participant";
+      
+const position = person.Position.trim().toLowerCase();
+
+    person.type = [
+  "1", "2", "3",
+  "first", "second", "third",
+  "1st", "2nd", "3rd"
+  ].includes(position)
+  ? "winner"
+  : "participant";
+
 
       person.certificateId = createCertificateId(
         person["Serial No."],
