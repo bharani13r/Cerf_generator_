@@ -1,0 +1,200 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Certificate Verification</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .verify-card {
+      max-width: 600px;
+      margin: 35px auto;
+    }
+
+    .verify-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .verify-form input {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .result {
+      margin-top: 22px;
+      padding: 18px;
+      border-radius: 10px;
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+    }
+
+    .verified {
+      color: #166534;
+      background: #ecfdf3;
+      border: 1px solid #86efac;
+    }
+
+    .not-verified {
+      color: #991b1b;
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+    }
+
+    .detail-label {
+      font-weight: bold;
+    }
+
+    .home-link {
+      display: inline-block;
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Certificate Verification</h1>
+    <p>Verify the authenticity of a digital certificate.</p>
+  </header>
+
+  <main>
+    <section class="card verify-card">
+      <h2>Check your certificate</h2>
+      <p>
+        Enter the certificate number printed near the QR code on your certificate.
+      </p>
+
+      <form id="verifyForm" class="verify-form">
+        <input
+          id="certificateId"
+          type="text"
+          placeholder="Example: CERT-1-A1B2C3D4E5F6"
+          autocomplete="off"
+          required
+        >
+        <button type="submit">Verify Certificate</button>
+      </form>
+
+      <p id="status" class="status" role="status"></p>
+      <div id="result" aria-live="polite"></div>
+
+      <a class="home-link" href="index.html">
+        Back to Certificate Generator
+      </a>
+    </section>
+  </main>
+
+  <footer>Digital Certificate Verification</footer>
+
+  <script>
+    const form = document.getElementById("verifyForm");
+    const idInput = document.getElementById("certificateId");
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+
+    function showStatus(message, isError = false) {
+      status.textContent = message;
+      status.classList.toggle("error", isError);
+    }
+
+    function addDetail(container, label, value) {
+      const paragraph = document.createElement("p");
+
+      const labelElement = document.createElement("span");
+      labelElement.className = "detail-label";
+      labelElement.textContent = label + ": ";
+
+      const valueElement = document.createElement("span");
+      valueElement.textContent = String(value ?? "");
+
+      paragraph.append(labelElement, valueElement);
+      container.appendChild(paragraph);
+    }
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+
+      const enteredId = idInput.value.trim();
+
+      result.replaceChildren();
+      showStatus("Checking certificate...");
+
+      if (!enteredId) {
+        showStatus("Please enter a certificate number.", true);
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          "./certificates.json",
+          { cache: "no-store" }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            "The certificate register is unavailable. Please try again later."
+          );
+        }
+
+        const register = await response.json();
+
+        if (!Array.isArray(register.certificates)) {
+          throw new Error("The certificate register has an invalid format.");
+        }
+
+        const certificate = register.certificates.find(
+          item =>
+            String(item.id ?? "").toUpperCase() === enteredId.toUpperCase()
+        );
+
+        if (!certificate) {
+          const box = document.createElement("div");
+          box.className = "result not-verified";
+
+          const heading = document.createElement("h2");
+          heading.textContent = "✗ NOT VERIFIED";
+
+          const message = document.createElement("p");
+          message.textContent =
+            "No matching certificate was found. Check the number and try again.";
+
+          box.append(heading, message);
+          result.appendChild(box);
+          showStatus("");
+          return;
+        }
+
+        const box = document.createElement("div");
+        box.className = "result verified";
+
+        const heading = document.createElement("h2");
+        heading.textContent = "✓ VERIFIED";
+
+        const message = document.createElement("p");
+        message.textContent =
+          "A matching record was found in the published certificate register.";
+
+        box.append(heading, message);
+
+        addDetail(box, "Certificate Number", certificate.id);
+        addDetail(box, "Serial Number", certificate.serialNo);
+        addDetail(box, "Participant Name", certificate.name);
+        addDetail(box, "Event", certificate.event);
+        addDetail(box, "Date", certificate.date);
+        addDetail(box, "Position", certificate.position);
+
+        result.appendChild(box);
+        showStatus("");
+      } catch (error) {
+        showStatus(
+          error.message || "Unable to verify this certificate.",
+          true
+        );
+      }
+    });
+  </script>
+</body>
+</html>
