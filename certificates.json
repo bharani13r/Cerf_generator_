@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-23T15:50:18.317Z",
+  "generatedAt": "2026-10-24T04:09:27.713Z",
   "certificates": [
     {
-      "id": "CERT-1-CBD470614A6D",
+      "id": "CERT-1-FF8189F1EE42",
       "serialNo": "1",
       "name": "MOHAMED YAHYA",
       "event": "TECHNOBLAZE",
@@ -12,16 +12,16 @@
       "type": "participant"
     },
     {
-      "id": "CERT-2-3479B2AB4C41",
+      "id": "CERT-2-BC8D6B1EFAF1",
       "serialNo": "2",
       "name": "SANJAYBABU",
       "event": "MECHAT",
       "date": "10th October 2026",
-      "position": "1",
+      "position": "Second",
       "type": "winner"
     },
     {
-      "id": "CERT-3-177295A6DF4C",
+      "id": "CERT-3-A55B030EBD55",
       "serialNo": "3",
       "name": "BHARANI",
       "event": "ELECTROFEST",
@@ -30,22 +30,49 @@
       "type": "participant"
     },
     {
-      "id": "CERT-4-CAA6AAF3762F",
+      "id": "CERT-4-A233B77902DF",
       "serialNo": "4",
       "name": "SUBHASRI",
       "event": "TECHNOBLAZE",
       "date": "12th October 2026",
-      "position": "2",
+      "position": "First",
       "type": "winner"
     },
     {
-      "id": "CERT-5-2365F30482FC",
+      "id": "CERT-5-023107016EC1",
       "serialNo": "5",
       "name": "BRITNY",
       "event": "METMAT",
       "date": "04th February 2026",
-      "position": "3",
+      "position": "Third",
       "type": "winner"
+    },
+    {
+      "id": "CERT-6-DCF6547E0E28",
+      "serialNo": "6",
+      "name": "ALEX",
+      "event": "RUNNING",
+      "date": "12th October 2026",
+      "position": "Participant",
+      "type": "participant"
+    },
+    {
+      "id": "CERT-7-6CD2010BC7D6",
+      "serialNo": "7",
+      "name": "SAM",
+      "event": "JUMPING",
+      "date": "10th October 2026",
+      "position": "Participant",
+      "type": "participant"
+    },
+    {
+      "id": "CERT-8-60918AEE3C5B",
+      "serialNo": "8",
+      "name": "GHOST",
+      "event": "RELAY RUN",
+      "date": "13th September 2026",
+      "position": "Participant",
+      "type": "participant"
     }
   ]
 }
