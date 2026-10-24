@@ -22,7 +22,7 @@
 <main>
   <section class="card">
     <h2>1. Upload Excel spreadsheet</h2>
-    <p>Required columns: Serial No., Name, Event, Date, Email, Position. Positions 1–3 use the winner template; other or blank positions use the participation template. Maximum 5 participants.</p>
+    <p>Required columns: Serial No., Name, Event, Date, Email, Position. Positions 1–3 use the winner template; other or blank positions use the participation template.</p>
     <input id="excelFile" type="file" accept=".xlsx,.xls">
     <button id="readBtn" type="button">Read spreadsheet</button>
     <p id="excelStatus" class="status" aria-live="polite"></p>
@@ -85,16 +85,10 @@
     </div>
   </section>
 
-  <section class="card">
-    <h2>3. Verification settings</h2>
-    <p>Enter your published GitHub Pages verification URL before generating PDFs on your computer. The QR code will open that page with the certificate number prefilled.</p>
-    <label for="verificationUrl">Public verification page URL</label>
-    <input id="verificationUrl" type="url" inputmode="url" placeholder="https://username.github.io/repository/verify.html" autocomplete="url">
-    <p class="status">If this generator is already running on your public website, you may leave this blank and it will use its own verify.html URL.</p>
-  </section>
+  
 
   <section class="card">
-    <h2>4. Generate certificates</h2>
+    <h2>3. Generate certificates</h2>
     <button id="previewBtn" type="button">Preview first participant</button>
     <button id="generateBtn" type="button">Generate PDFs and JSON register</button>
     <p id="generateStatus" class="status" aria-live="polite"></p>
